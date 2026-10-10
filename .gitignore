@@ -1,0 +1,21 @@
+# 运行产物
+output/
+run_log.txt
+
+# Python
+__pycache__/
+*.pyc
+
+# 缓存（路网数据 raw.json 体积可控且拉取困难，单独放行）
+cache/*
+!cache/raw.json
+
+# 数据目录（WorldPop 等大文件）
+data/
+
+# Docker
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
