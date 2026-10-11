@@ -217,7 +217,7 @@ def load_osm_population(n=N_DEMAND):
     cells.sort(key=lambda r: r["population"], reverse=True)
     top = cells[:n]
 
-    # 记录网格密度（人/km²）供绘图
+    # 记录网格密度（人/km²）供绘图。带格子跨度 w/h，网页端据此画矩形
     import math
     cell_h_deg = (LAT_MAX - LAT_MIN) / 28
     cell_w_deg = (LON_MAX - LON_MIN) / 30
@@ -225,7 +225,9 @@ def load_osm_population(n=N_DEMAND):
     mlon = 111.32 * math.cos(math.radians((LAT_MIN + LAT_MAX) / 2)) * cell_w_deg
     area_km2 = max(mlat * mlon / 1e6, 1e-6)
     DENSITY_CACHE = [
-        {"lat": c["lat"], "lon": c["lon"], "density": c["population"] / area_km2}
+        {"lat": c["lat"], "lon": c["lon"],
+         "density": c["population"] / area_km2,
+         "w": cell_w_deg, "h": cell_h_deg}
         for c in cells if c["population"] > 0
     ]
 
@@ -269,7 +271,8 @@ def build_population(n=N_DEMAND, seed=SEED):
                     G,
                     bounds=(LON_MIN, LAT_MIN, LON_MAX, LAT_MAX))
                 DENSITY_CACHE = [
-                    {"lat": c["lat"], "lon": c["lon"], "density": c["density"]}
+                    {"lat": c["lat"], "lon": c["lon"], "density": c["density"],
+                     "w": c["w"], "h": c["h"]}
                     for c in cells
                 ]
                 pts = pop_sim.cells_to_demand(cells, n)
@@ -520,7 +523,8 @@ def plot(dem, sites, shelters, assignments, G=None):
         path = web_view.build(dem, shelters, assignments, G, OUT,
                               SHELTER_CAPACITY,
                               place=PLACE.split(",")[0],
-                              cost_label=COST_LABEL)
+                              cost_label=COST_LABEL,
+                              grid=DENSITY_CACHE)
         log(f"  网页已生成 -> {path}")
         log("  用浏览器打开该文件即可交互查看（无需启动任何服务）")
     except Exception as e:

@@ -165,6 +165,9 @@ def make_population_grid(graph,
                 "density": pop / area_km2,          # 人/km²
                 "access": access_score,
                 "min_road_km": min_road_km,
+                # 格子的经纬度跨度。可视化时据此画矩形
+                # （格子是数据准备阶段人工切的，范围由此定义）
+                "w": dlon, "h": dlat,
             })
 
     cells.sort(key=lambda r: r["population"], reverse=True)

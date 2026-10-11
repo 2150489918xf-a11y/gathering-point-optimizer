@@ -18,8 +18,8 @@ PALETTE = ["#D85A30", "#1D9E75", "#185FA5", "#BA7517", "#7F77DD", "#D4537E"]
 
 
 def build(dem, shelters, assignments, G, out_dir, capacity,
-          place="九江市", cost_label=""):
-    """生成单文件 HTML，返回路径。"""
+          place="九江市", cost_label="", grid=None):
+    """生成单文件 HTML，返回路径。grid 是密度网格（含 w/h 格子跨度）。"""
 
     # ---- 路网几何 ----
     # 坐标压到 5 位小数（约 1 米精度，足够市级尺度）。
@@ -77,6 +77,15 @@ def build(dem, shelters, assignments, G, out_dir, capacity,
     payload = {
         "roads": segs, "shelters": shelters_l, "points": points_l,
         "bbox": bbox, "capacity": capacity, "palette": PALETTE,
+        # 密度网格：每个格子中心 + 跨度 + 密度，网页画成可开关的矩形层
+        "grid": {
+            "cells": [
+                {"lon": c["lon"], "lat": c["lat"],
+                 "density": round(float(c["density"]), 1),
+                 "w": c.get("w", 0.007), "h": c.get("h", 0.005)}
+                for c in (grid or [])
+            ],
+        },
         "meta": {
             "place": place, "totalPop": total_pop,
             "nPoints": len(dem), "nShelters": len(shelters_l),
@@ -177,14 +186,17 @@ label.chk { font-size:12px; display:flex; align-items:center; gap:5px;
         stroke="#D85A30" stroke-width="1.6"/></svg> 分配连线</div>
       <div><svg width="13" height="13"><line x1="1" y1="6.5" x2="12" y2="6.5"
         stroke="#D3D1C7" stroke-width="1.2"/></svg> 路网</div>
+      <div><svg width="13" height="13"><rect x="1" y="1" width="11" height="11"
+        fill="#E34A33" fill-opacity="0.72"/></svg> 密度网格（悬停看数值）</div>
     </div>
-    <div class="hint">滚轮缩放 · 拖拽平移 · 点击集合点或右侧列表高亮</div>
+    <div class="hint">滚轮缩放 · 拖拽平移 · 悬停格子看密度 · 点击集合点或右侧列表高亮</div>
   </div>
   <div id="side">
     <div class="ctrl">
       <button id="btnAll" class="on">全部</button>
       <button id="btnReset">重置视图</button>
       <label class="chk"><input type="checkbox" id="cbRoad" checked>路网</label>
+      <label class="chk"><input type="checkbox" id="cbGrid">密度网格</label>
       <label class="chk"><input type="checkbox" id="cbLink" checked>连线</label>
     </div>
     <h2>集合点列表</h2>
@@ -228,6 +240,44 @@ D.roads.forEach(s=>{
     'stroke-opacity':0.85}));
 });
 roadG.appendChild(frag);
+
+// ---- 密度网格（可开关。格子是人工切的统计单元，颜色=人/km²） ----
+let gridG = el('g', {id:'grid'});
+content.appendChild(gridG);
+function densColor(t){
+  // 与 PNG 版一致的色标：浅米 -> 橙 -> 深红
+  const stops=[[0,'#FFF7EC'],[0.2,'#FEE8C8'],[0.45,'#FDBB84'],
+               [0.68,'#E34A33'],[0.86,'#B30000'],[1,'#7A0000']];
+  if(t<=0) return stops[0][1];
+  for(let i=1;i<stops.length;i++){
+    if(t<=stops[i][0]){
+      const [t0,c0]=stops[i-1],[t1,c1]=stops[i];
+      const f=(t-t0)/(t1-t0);
+      const A=parseInt(c0.slice(1),16),B=parseInt(c1.slice(1),16);
+      const ch=k=>Math.round(((A>>k)&0xff)+((((B>>k)&0xff)-((A>>k)&0xff))*f));
+      return 'rgb('+ch(16)+','+ch(8)+','+ch(0)+')';
+    }
+  }
+  return stops[stops.length-1][1];
+}
+if(D.grid && D.grid.cells.length){
+  const mx = Math.max(...D.grid.cells.map(c=>c.density)) || 1;
+  const gfrag = document.createDocumentFragment();
+  D.grid.cells.forEach(c=>{
+    const x1=px(c.lon-c.w/2), y1=py(c.lat+c.h/2);
+    const x2=px(c.lon+c.w/2), y2=py(c.lat-c.h/2);
+    const r = el('rect',{
+      x:Math.min(x1,x2), y:Math.min(y1,y2),
+      width:Math.abs(x2-x1), height:Math.abs(y2-y1),
+      fill:densColor(c.density/mx), 'fill-opacity':0.72,
+      stroke:'none'});
+    const tt = el('title');
+    tt.textContent = '密度 ' + Math.round(c.density).toLocaleString() + ' 人/km²';
+    r.appendChild(tt);
+    gfrag.appendChild(r);
+  });
+  gridG.appendChild(gfrag);
+}
 
 // ---- 连线 ----
 let linkG = el('g', {id:'links'});
@@ -369,6 +419,14 @@ document.getElementById('btnReset').addEventListener('click',()=>{
 document.getElementById('btnAll').addEventListener('click',()=>pick(null));
 document.getElementById('cbRoad').addEventListener('change',e=>{
   roadG.setAttribute('display', e.target.checked?'':'none');});
+const _cbGrid=document.getElementById('cbGrid');
+if(D.grid && D.grid.cells.length){
+  _cbGrid.addEventListener('change',e=>{
+    gridG.setAttribute('display', e.target.checked?'':'none');});
+}else{
+  // 无网格数据时隐藏开关，避免一个点了没反应的假按钮
+  _cbGrid.parentElement.style.display='none';
+}
 document.getElementById('cbLink').addEventListener('change',e=>{
   linkG.setAttribute('display', e.target.checked?'':'none');});
 
